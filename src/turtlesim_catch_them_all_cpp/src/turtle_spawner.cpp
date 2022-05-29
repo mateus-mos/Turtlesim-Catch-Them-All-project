@@ -5,8 +5,14 @@
 class TurtleSpawnerNode: public rclcpp::Node 
 {
 public:
-    TurtleSpawnerNode() : Node("node_name") 
+    TurtleSpawnerNode() : Node("turtle_spawner") 
     {
+        timer_ = this->create_wall_timer(
+            std::chrono::seconds(1), 
+            [this]()->void{
+                threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::spawnTurtle, this)));
+            }
+        );
     }
 
 private:
@@ -17,7 +23,7 @@ private:
         std::mt19937 gen(rd());
         std::uniform_real_distribution<> dist(0, 11);
 
-        auto client = this->create_client<turtlesim::srv::Spawn>("Spawn");
+        auto client = this->create_client<turtlesim::srv::Spawn>("spawn");
 
         /* Check if the service is up */
         while(!client->wait_for_service(std::chrono::seconds(1)))
@@ -43,8 +49,10 @@ private:
         {
             RCLCPP_ERROR(this->get_logger(), "Service call to 'Spawn' failed.");
         }
-        
     }
+
+    rclcpp::TimerBase::SharedPtr timer_;
+    std::vector<std::thread> threads_;
 };
 
 int main(int argc, char **argv)
