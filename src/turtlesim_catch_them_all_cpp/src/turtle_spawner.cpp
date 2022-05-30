@@ -1,12 +1,13 @@
 #include <random>
 #include <thread>
-#include <mutex>
 #include "rclcpp/rclcpp.hpp"
 #include "turtlesim/srv/spawn.hpp"
+#include "turtlesim/srv/kill.hpp"
 #include "turtlesim_catch_them_all_project_interfaces/msg/turtle_array.hpp"
+#include "turtlesim_catch_them_all_project_interfaces/srv/catch_turtle.hpp"
 
-
-std::mutex mtx;
+using std::placeholders::_1;
+using std::placeholders::_2;
 
 class TurtleSpawnerNode: public rclcpp::Node 
 {
@@ -18,6 +19,11 @@ public:
             10
         );
 
+        catch_turtle_service_ = this->create_service<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle>(
+            "catch_turtle",
+            std::bind(&TurtleSpawnerNode::serviceCatchTurtle, this, _1, _2)
+        );
+
         timer_alive_turtles_publisher_ = this->create_wall_timer(
             std::chrono::seconds(1),
             [this]()->void{
@@ -26,7 +32,7 @@ public:
         );
 
         timer_ = this->create_wall_timer(
-            std::chrono::seconds(5), 
+            std::chrono::seconds(10), 
             [this]()->void{
                 threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::spawnTurtle, this)));
             }
@@ -96,11 +102,58 @@ private:
         alive_turtles_publisher_->publish(msg);
     }
 
-    std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> alive_turtles_;
-    rclcpp::Publisher<turtlesim_catch_them_all_project_interfaces::msg::TurtleArray>::SharedPtr alive_turtles_publisher_;
-    rclcpp::TimerBase::SharedPtr timer_alive_turtles_publisher_;
-    rclcpp::TimerBase::SharedPtr timer_;
+    void serviceCatchTurtle(const turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Request::SharedPtr request,
+                            turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Response::SharedPtr response)
+    {
+        auto client = this->create_client<turtlesim::srv::Kill>("kill");
+
+        /* Check if the service is up */
+        while(!client->wait_for_service(std::chrono::seconds(1)))
+        {
+            RCLCPP_WARN(this->get_logger(), "Waiting for the 'kill' service to be up...");
+        }
+
+
+
+        /* Find the turtle index by it's name */
+        int i = 0;
+        int vector_length = int(alive_turtles_.size());
+        while(i < vector_length && alive_turtles_.at(i).name != request->name )
+            i++;
+
+        if(i < vector_length)
+        {
+            //response->debug_msg = "Turtle '" + std::string(request->name)+ "' caught with success!";
+            /* Remove turtle from turtles' vector */
+            //alive_turtles_.erase(alive_turtles_.begin() + i);
+
+            auto requestKill = std::make_shared<turtlesim::srv::Kill::Request>();
+
+            requestKill->name = request->name;
+
+            //auto future = client->async_send_request(requestKill);
+
+            //try
+            //{
+            //    auto response = future.get();
+            //    RCLCPP_INFO(this->get_logger(),  "Service call to 'kill' succeed.");
+            //}
+            //catch(const std::exception& e)
+            //{
+            //    RCLCPP_ERROR(this->get_logger(), "Serivce call to 'kill' failed.");
+            //}
+        }
+        else 
+            response->debug_msg = "The '" + std::string(request->name) + "' doesn't exist!"; 
+    }
+
     std::vector<std::thread> threads_;
+    std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> alive_turtles_;
+
+    rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr timer_alive_turtles_publisher_;
+    rclcpp::Service<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle>::SharedPtr catch_turtle_service_;
+    rclcpp::Publisher<turtlesim_catch_them_all_project_interfaces::msg::TurtleArray>::SharedPtr alive_turtles_publisher_;
 };
 
 int main(int argc, char **argv)
