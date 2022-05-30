@@ -19,10 +19,11 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(turtlesim REQUIRED)
+find_package(turtlesim_catch_them_all_project_interfaces REQUIRED)
 
 
 add_executable(turtle_spawner src/turtle_spawner.cpp)
-ament_target_dependencies(turtle_spawner rclcpp turtlesim)
+ament_target_dependencies(turtle_spawner rclcpp turtlesim turtlesim_catch_them_all_project_interfaces) 
 
 install(TARGETS
   turtle_spawner
