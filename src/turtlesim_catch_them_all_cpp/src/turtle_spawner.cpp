@@ -9,6 +9,7 @@
 using std::placeholders::_1;
 using std::placeholders::_2;
 
+
 class TurtleSpawnerNode: public rclcpp::Node 
 {
 public:
@@ -26,13 +27,11 @@ public:
 
         timer_alive_turtles_publisher_ = this->create_wall_timer(
             std::chrono::seconds(1),
-            [this]()->void{
-                threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::publisherAliverTurtles, this)));
-            }
+            std::bind(&TurtleSpawnerNode::publisherAliverTurtles, this)
         );
 
         timer_ = this->create_wall_timer(
-            std::chrono::seconds(10), 
+            std::chrono::seconds(5), 
             [this]()->void{
                 threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::spawnTurtle, this)));
             }
@@ -64,7 +63,7 @@ private:
         request->x = dist(gen);
         request->y = dist(gen);
         request->theta = dist(gen);
-        request->name = "turtle"+std::to_string(alive_turtles_.size()+2);
+        request->name = "turtle" + std::to_string(int(request->x)) + std::to_string(int(request->y)) + std::to_string(int(request->theta));
 
 
         /* Fill the information of the new turtle */
@@ -105,16 +104,6 @@ private:
     void serviceCatchTurtle(const turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Request::SharedPtr request,
                             turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Response::SharedPtr response)
     {
-        auto client = this->create_client<turtlesim::srv::Kill>("kill");
-
-        /* Check if the service is up */
-        while(!client->wait_for_service(std::chrono::seconds(1)))
-        {
-            RCLCPP_WARN(this->get_logger(), "Waiting for the 'kill' service to be up...");
-        }
-
-
-
         /* Find the turtle index by it's name */
         int i = 0;
         int vector_length = int(alive_turtles_.size());
@@ -123,28 +112,44 @@ private:
 
         if(i < vector_length)
         {
-            //response->debug_msg = "Turtle '" + std::string(request->name)+ "' caught with success!";
+            response->debug_msg = "Turtle '" + std::string(request->name)+ "' caught with success!";
+
             /* Remove turtle from turtles' vector */
-            //alive_turtles_.erase(alive_turtles_.begin() + i);
+            alive_turtles_.erase(alive_turtles_.begin() + i);
 
-            auto requestKill = std::make_shared<turtlesim::srv::Kill::Request>();
-
-            requestKill->name = request->name;
-
-            //auto future = client->async_send_request(requestKill);
-
-            //try
-            //{
-            //    auto response = future.get();
-            //    RCLCPP_INFO(this->get_logger(),  "Service call to 'kill' succeed.");
-            //}
-            //catch(const std::exception& e)
-            //{
-            //    RCLCPP_ERROR(this->get_logger(), "Serivce call to 'kill' failed.");
-            //}
+            /* Call procedure to kill the turtle */
+            threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::killTurtle, this, request->name)));
         }
         else 
-            response->debug_msg = "The '" + std::string(request->name) + "' doesn't exist!"; 
+            response->debug_msg = "Turtle '" + std::string(request->name) + "' not found!"; 
+
+    }
+
+    void killTurtle(const std::string name)
+    {
+        auto client = this->create_client<turtlesim::srv::Kill>("kill");
+
+        /* Check if the service is up */
+        while(!client->wait_for_service(std::chrono::seconds(1)))
+        {
+            RCLCPP_WARN(this->get_logger(), "Waiting for the 'kill' service to be up...");
+        }
+
+        auto requestKill = std::make_shared<turtlesim::srv::Kill::Request>();
+
+        requestKill->name = name;
+
+        auto future = client->async_send_request(requestKill);
+
+        try
+        {
+            auto response = future.get();
+            RCLCPP_INFO(this->get_logger(),  "Service call to 'kill' succeed.");
+        }
+        catch(const std::exception& e)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Serivce call to 'kill' failed.");
+        }
     }
 
     std::vector<std::thread> threads_;
