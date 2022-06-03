@@ -25,8 +25,12 @@ find_package(turtlesim_catch_them_all_project_interfaces REQUIRED)
 add_executable(turtle_spawner src/turtle_spawner.cpp)
 ament_target_dependencies(turtle_spawner rclcpp turtlesim turtlesim_catch_them_all_project_interfaces) 
 
+add_executable(turtle_controller src/turtle_controller.cpp)
+ament_target_dependencies(turtle_controller rclcpp turtlesim_catch_them_all_project_interfaces) 
+
 install(TARGETS
   turtle_spawner
+  turtle_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 
