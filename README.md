@@ -2,7 +2,7 @@
 
 This is the final project of the course [ROS2 For Beginners](https://www.udemy.com/course/ros2-for-beginners/).
 
-The objective of this project is to create the following behavior in turtlesimnode:
+The objective of this project is to create the following behavior using the turtlesim package:
 
 **Put the gif here**
 
