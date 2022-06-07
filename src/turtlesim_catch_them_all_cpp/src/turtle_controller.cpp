@@ -1,4 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
+#include <chrono>
 #include <cmath>
 #include "turtlesim/msg/pose.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -16,6 +17,7 @@ class TurtleControllerNode : public rclcpp::Node
         double_t x;
         double_t y;
     } Point;
+    turtlesim::msg::Pose::SharedPtr turtle1_pose_;
 
 public:
     TurtleControllerNode() : Node("turtle_controller")
@@ -32,54 +34,73 @@ public:
 
         cmd_vel_turtle1_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("turtle1/cmd_vel", 10);
 
-        Point turtle1_coord_;
-        Point target_turtle_coord_;
+        auto target_turtle_coord_ = std::make_shared<Point>();
+        auto desired_theta_ = std::make_shared<std::double_t>();
 
-        double_t actual_theta_ = 0;
-        double_t desired_theta_ = 0;
-
-        turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr target_turtle_;
-
-        while (alive_turtles_.size() != 0)
-        {
-            RCLCPP_INFO(this->get_logger(), "Hiii im here");
-            turtle1_coord_.x = turtle1_pose_->x;
-            turtle1_coord_.y = turtle1_pose_->y;
-
-            target_turtle_ = nearestTurtle(turtle1_coord_, alive_turtles_);
-
-            target_turtle_coord_.x = target_turtle_->x;
-            target_turtle_coord_.y = target_turtle_->y;
-            desired_theta_ = atan( abs(turtle1_coord_.y - target_turtle_coord_.y) / abs(turtle1_coord_.x - target_turtle_coord_.x) );
-
-            while (distanceBetweenPoints(turtle1_coord_, target_turtle_coord_) > 1)
-            {
-                turtle1_coord_.x = turtle1_pose_->x;
-                turtle1_coord_.y = turtle1_pose_->y;
-
-                actual_theta_ = turtle1_pose_->theta;
-
-            }
-        }
-
+        
 
         timer_theta_ = this->create_wall_timer(
             std::chrono::seconds(1),
-            [this, actual_theta_, desired_theta_]() -> void
+            [this, &turtle1_pose_, desired_theta_]() -> void
             {
-                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::thetaPcontroller, this, actual_theta_, desired_theta_)));
+                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::thetaPcontroller, this, turtle1_pose_, desired_theta_)));
             }
         );
 
         timer_velocity_ = this->create_wall_timer(
             std::chrono::seconds(1),
-            [this, turtle1_coord_, target_turtle_coord_]() -> void
+            [this, &turtle1_pose_, target_turtle_coord_]() -> void
             {
-                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::velocityPcontroller, this, turtle1_coord_, target_turtle_coord_)));
-            });
-    }
+                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::velocityPcontroller, this, turtle1_pose_, target_turtle_coord_)));
+            }
+        );
+
+
+   }
 
 private:
+    void StartCatchTurtles(std::shared_ptr<Point> target_turtle_coord_, std::shared_ptr<std::double_t> desired_theta_)
+    {
+        RCLCPP_INFO(this->get_logger(), "Catch Turtles Started!");
+        turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr target_turtle_;
+        Point turtle1_coord_;
+
+
+        /* It runs until node is killed */
+        while(1)
+        {
+            while(alive_turtles_.size() != 0)
+            {
+                /* Refresh turtle1 coord */
+                turtle1_coord_.x = turtle1_pose_->x;
+                turtle1_coord_.y = turtle1_pose_->y;
+
+                target_turtle_ = nearestTurtle(turtle1_coord_, alive_turtles_);
+
+                target_turtle_coord_->x = target_turtle_->x;
+                target_turtle_coord_->y = target_turtle_->y;
+
+                *desired_theta_ = atan( abs(turtle1_coord_.y - target_turtle_coord_->y) / abs(turtle1_coord_.x - target_turtle_coord_->x) );
+
+
+                /* Runs until turtl1 catches the target turtle */
+                while(distanceBetweenPoints(turtle1_coord_, Point{target_turtle_coord_->x, target_turtle_coord_->y}))
+                {
+                    /* Refresh turtle1 coord */
+                    turtle1_coord_.x = turtle1_pose_->x;
+                    turtle1_coord_.y = turtle1_pose_->y;
+
+                    /* Refresh target turtle coord */
+                    target_turtle_coord_->x = target_turtle_->x;
+                    target_turtle_coord_->y = target_turtle_->y;
+                }
+            }
+
+            RCLCPP_INFO(this->get_logger(), "There's no turtles to catch!");
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+    }
+
     /* Return the index of the nearestTurtle */
     turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr nearestTurtle(Point master_turtle_coord_,
                                                                                       std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> turtles_)
@@ -139,10 +160,13 @@ private:
         turtle1_pose_ = new_turtle1_pose_;
     }
 
-    void thetaPcontroller(double_t actual_theta_, double_t desired_theta_)
+    void thetaPcontroller(turtlesim::msg::Pose::SharedPtr turtle1_pose_, double_t desired_theta_)
     {
         double_t error_;
         geometry_msgs::msg::Twist new_theta_;
+        double_t actual_theta_;
+
+        actual_theta_ = turtle1_pose_->theta;
 
         error_ = actual_theta_ - desired_theta_;
 
@@ -162,10 +186,14 @@ private:
         cmd_vel_turtle1_publisher_->publish(new_theta_);
     }
 
-    void velocityPcontroller(Point master_turtle_, Point target_turtle_)
+    void velocityPcontroller(turtlesim::msg::Pose::SharedPtr turtle1_pose_, Point target_turtle_)
     {
         double_t distance_;
+        Point master_turtle_;
         geometry_msgs::msg::Twist new_x_;
+
+        master_turtle_.x = turtle1_pose_->x;
+        master_turtle_.y = turtle1_pose_->y;
 
         distance_ = distanceBetweenPoints(master_turtle_, target_turtle_);
 
@@ -182,7 +210,6 @@ private:
         cmd_vel_turtle1_publisher_->publish(new_x_);
     }
 
-    turtlesim::msg::Pose::SharedPtr turtle1_pose_;
     std::vector<std::thread> threads_;
     std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> alive_turtles_;
 
