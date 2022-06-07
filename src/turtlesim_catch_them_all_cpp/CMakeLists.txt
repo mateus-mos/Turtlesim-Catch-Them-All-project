@@ -19,6 +19,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(turtlesim REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(turtlesim_catch_them_all_project_interfaces REQUIRED)
 
 
@@ -26,7 +27,7 @@ add_executable(turtle_spawner src/turtle_spawner.cpp)
 ament_target_dependencies(turtle_spawner rclcpp turtlesim turtlesim_catch_them_all_project_interfaces) 
 
 add_executable(turtle_controller src/turtle_controller.cpp)
-ament_target_dependencies(turtle_controller rclcpp turtlesim_catch_them_all_project_interfaces) 
+ament_target_dependencies(turtle_controller rclcpp turtlesim turtlesim_catch_them_all_project_interfaces geometry_msgs) 
 
 install(TARGETS
   turtle_spawner
