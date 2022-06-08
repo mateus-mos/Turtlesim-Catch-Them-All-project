@@ -6,6 +6,7 @@
 #include "geometry_msgs/msg/vector3.hpp"
 #include "turtlesim_catch_them_all_project_interfaces/msg/turtle_array.hpp"
 #include "turtlesim_catch_them_all_project_interfaces/msg/turtle.hpp"
+#include "turtlesim_catch_them_all_project_interfaces/srv/catch_turtle.hpp"
 
 using std::placeholders::_1;
 
@@ -46,24 +47,68 @@ private:
         double_t distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
         double_t distance_k_ = 0.3;
 
-        double_t target_theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) ); 
-        double_t target_k_ = 3.5; 
+        double_t theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) ); 
+        double_t target_theta_;
+        double_t target_k_ = 2; 
 
+        auto client = this->create_client<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle>("catch_turtle");
 
-
-
-        while(distance_from_master_ > 1)
+        /* Check if the service is up */
+        while(!client->wait_for_service(std::chrono::seconds(1)))
         {
-            if(abs(2*M_PI - target_theta_ - master_turtle_pose_.theta) > target_theta_ - master_turtle_pose_.theta)
-                msg_master_pose_.angular.z = (target_theta_ - master_turtle_pose_.theta)*target_k_;
+            RCLCPP_WARN(this->get_logger(), "Waiting for the 'catch_turtle' service to be up...");
+        }
+
+        auto request = std::make_shared<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Request>();
+        request->name = target_turtle_.name;
+
+        while(distance_from_master_ > 0.5)
+        {
+            /* Calculate the target theta target turtles quadrant */
+            if(target_turtle_.x < master_turtle_pose_.x)
+            {
+                if(target_turtle_.y < master_turtle_pose_.y)
+                    target_theta_ = (3*M_PI)/2 - theta_;
+                else
+                    target_theta_ = M_PI - theta_;
+            }
             else
-                msg_master_pose_.angular.z = abs(2*M_PI - target_theta_ - master_turtle_pose_.theta)*-target_k_;
+            {
+                if(target_turtle_.y < master_turtle_pose_.y)
+                    target_theta_ = (3*M_PI)/2 + theta_;
+                else
+                    target_theta_ = theta_;
+            }
+
+            /* Calculate the best direction to turn */
+            //if(abs(2*M_PI - target_theta_ - master_turtle_pose_.theta) > target_theta_ - master_turtle_pose_.theta)
+            //    msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*target_k_;
+            //else
+            //    msg_master_pose_.angular.z = abs(2*M_PI - target_theta_ - master_turtle_pose_.theta)*-target_k_;
+            if( (target_theta_ - master_turtle_pose_.theta) < M_PI)
+                msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*target_k_;
+            else
+                msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*-target_k_;
+
 
            msg_master_pose_.linear.x = distance_from_master_ * distance_k_;
 
            cmd_vel_publisher_->publish(msg_master_pose_);
 
            distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
+        }
+
+        /* Sendo request to catch the turtle */
+        auto future = client->async_send_request(request);
+
+        try
+        {
+            auto response = future.get();
+            RCLCPP_INFO(this->get_logger(), "Service call to 'catch_turtle' succeed.");
+        }
+        catch(const std::exception& e)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Service call to 'catch_turtle' failed.");
         }
 
         catching_a_turtle_ = false;
