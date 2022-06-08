@@ -17,7 +17,6 @@ class TurtleControllerNode : public rclcpp::Node
         double_t x;
         double_t y;
     } Point;
-    turtlesim::msg::Pose::SharedPtr turtle1_pose_;
 
 public:
     TurtleControllerNode() : Node("turtle_controller")
@@ -27,197 +26,95 @@ public:
             10,
             std::bind(&TurtleControllerNode::callbackAliveTurtles, this, _1));
 
-        pose_turtle1_subscriber_ = this->create_subscription<turtlesim::msg::Pose>(
+        pose_master_turtle_subscriber_ = this->create_subscription<turtlesim::msg::Pose>(
             "turtle1/pose",
             10,
             std::bind(&TurtleControllerNode::callbackPoseTurtle1, this, _1));
 
-        cmd_vel_turtle1_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("turtle1/cmd_vel", 10);
-
-        auto target_turtle_coord_ = std::make_shared<Point>();
-        auto desired_theta_ = std::make_shared<std::double_t>();
-
-        
-
-        timer_theta_ = this->create_wall_timer(
-            std::chrono::seconds(1),
-            [this, &turtle1_pose_, desired_theta_]() -> void
-            {
-                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::thetaPcontroller, this, turtle1_pose_, desired_theta_)));
-            }
-        );
-
-        timer_velocity_ = this->create_wall_timer(
-            std::chrono::seconds(1),
-            [this, &turtle1_pose_, target_turtle_coord_]() -> void
-            {
-                threads_.push_back(std::thread(std::bind(&TurtleControllerNode::velocityPcontroller, this, turtle1_pose_, target_turtle_coord_)));
-            }
-        );
-
-
-   }
+        cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("turtle1/cmd_vel", 10);
+    }
 
 private:
-    void StartCatchTurtles(std::shared_ptr<Point> target_turtle_coord_, std::shared_ptr<std::double_t> desired_theta_)
+
+    void CatchTarget()
     {
-        RCLCPP_INFO(this->get_logger(), "Catch Turtles Started!");
-        turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr target_turtle_;
-        Point turtle1_coord_;
+        RCLCPP_INFO(this->get_logger(), "Catching the " + target_turtle_.name + " turtle");
+
+        auto msg_master_pose_ = geometry_msgs::msg::Twist(); 
+        catching_a_turtle_ = true;
+
+        double_t distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
+        double_t distance_k_ = 0.3;
+
+        double_t target_theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) ); 
+        double_t target_k_ = 3.5; 
 
 
-        /* It runs until node is killed */
-        while(1)
+
+
+        while(distance_from_master_ > 1)
         {
-            while(alive_turtles_.size() != 0)
-            {
-                /* Refresh turtle1 coord */
-                turtle1_coord_.x = turtle1_pose_->x;
-                turtle1_coord_.y = turtle1_pose_->y;
+            if(abs(2*M_PI - target_theta_ - master_turtle_pose_.theta) > target_theta_ - master_turtle_pose_.theta)
+                msg_master_pose_.angular.z = (target_theta_ - master_turtle_pose_.theta)*target_k_;
+            else
+                msg_master_pose_.angular.z = abs(2*M_PI - target_theta_ - master_turtle_pose_.theta)*-target_k_;
 
-                target_turtle_ = nearestTurtle(turtle1_coord_, alive_turtles_);
+           msg_master_pose_.linear.x = distance_from_master_ * distance_k_;
 
-                target_turtle_coord_->x = target_turtle_->x;
-                target_turtle_coord_->y = target_turtle_->y;
+           cmd_vel_publisher_->publish(msg_master_pose_);
 
-                *desired_theta_ = atan( abs(turtle1_coord_.y - target_turtle_coord_->y) / abs(turtle1_coord_.x - target_turtle_coord_->x) );
-
-
-                /* Runs until turtl1 catches the target turtle */
-                while(distanceBetweenPoints(turtle1_coord_, Point{target_turtle_coord_->x, target_turtle_coord_->y}))
-                {
-                    /* Refresh turtle1 coord */
-                    turtle1_coord_.x = turtle1_pose_->x;
-                    turtle1_coord_.y = turtle1_pose_->y;
-
-                    /* Refresh target turtle coord */
-                    target_turtle_coord_->x = target_turtle_->x;
-                    target_turtle_coord_->y = target_turtle_->y;
-                }
-            }
-
-            RCLCPP_INFO(this->get_logger(), "There's no turtles to catch!");
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-        }
-    }
-
-    /* Return the index of the nearestTurtle */
-    turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr nearestTurtle(Point master_turtle_coord_,
-                                                                                      std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> turtles_)
-    {
-        if (turtles_.size() <= 0)
-            RCLCPP_ERROR(this->get_logger(), "Vector 'turtles_' is empty!");
-
-        double_t distance_nearest_turtle_ = 0;
-        turtlesim_catch_them_all_project_interfaces::msg::Turtle::SharedPtr nearest_turtle_;
-        int turtle_index_ = 0;
-
-        double_t distance_;
-
-        Point turtle_coord_;
-
-        /* Get the distance of the first turtle in the turtles' vector */
-        turtle_coord_.x = turtles_.at(0).x;
-        turtle_coord_.y = turtles_.at(0).y;
-
-        distance_nearest_turtle_ = distanceBetweenPoints(master_turtle_coord_, turtle_coord_);
-
-        int v_size_ = int(turtles_.size());
-        /* Find the nearestTurtle in the vector */
-        for (int i = 0; i < v_size_; i++)
-        {
-            turtle_coord_.x = turtles_.at(i).x;
-            turtle_coord_.y = turtles_.at(i).y;
-
-            distance_ = distanceBetweenPoints(master_turtle_coord_, turtle_coord_);
-
-            if (distance_ < distance_nearest_turtle_)
-            {
-                distance_nearest_turtle_ = distance_;
-                turtle_index_ = i;
-            }
+           distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
         }
 
-        nearest_turtle_->x = alive_turtles_.at(turtle_index_).x;
-        nearest_turtle_->y = alive_turtles_.at(turtle_index_).y;
-        nearest_turtle_->name = alive_turtles_.at(turtle_index_).name;
-
-        return nearest_turtle_;
+        catching_a_turtle_ = false;
     }
 
-    double_t distanceBetweenPoints(Point p1, Point p2)
+    /* Return the distance between the master turtle and the point (x,y) */
+    double_t distanceFromMaster(double_t x, double_t y)
     {
-        return (sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2)));
+        return (sqrt(pow(master_turtle_pose_.x - x, 2) + pow(master_turtle_pose_.y - y, 2)));
     }
 
-    void callbackAliveTurtles(turtlesim_catch_them_all_project_interfaces::msg::TurtleArray::SharedPtr new_alive_turtles_)
+    void callbackAliveTurtles(turtlesim_catch_them_all_project_interfaces::msg::TurtleArray::SharedPtr alive_turtles_)
     {
-        alive_turtles_ = new_alive_turtles_->alive_turtles;
+        /* If the master turtle is already catching a turtle, we don't need a new target */
+        if(catching_a_turtle_ == true)
+            return;
+
+        double_t lowest_distance_ = distanceFromMaster(alive_turtles_->alive_turtles.at(0).x, alive_turtles_->alive_turtles.at(0).y);
+        double_t new_distance_ = 0;
+
+        target_turtle_ = alive_turtles_->alive_turtles.at(0);
+
+        for (int i = 0; i < int(alive_turtles_->alive_turtles.size()); i++)
+        {
+            /* Calculate the distance of the current turtle */
+            new_distance_ = distanceFromMaster(alive_turtles_->alive_turtles.at(i).x, alive_turtles_->alive_turtles.at(i).y);
+
+            if(lowest_distance_ > new_distance_)
+            {
+                lowest_distance_ = new_distance_;
+                target_turtle_ = alive_turtles_->alive_turtles.at(0);
+            }
+        }
+        threads_.push_back(std::thread(std::bind(&TurtleControllerNode::CatchTarget, this)));
     }
 
     void callbackPoseTurtle1(turtlesim::msg::Pose::SharedPtr new_turtle1_pose_)
     {
-        turtle1_pose_ = new_turtle1_pose_;
+        master_turtle_pose_ = *new_turtle1_pose_.get();
+        turtlesim_up_ = true;
     }
 
-    void thetaPcontroller(turtlesim::msg::Pose::SharedPtr turtle1_pose_, double_t desired_theta_)
-    {
-        double_t error_;
-        geometry_msgs::msg::Twist new_theta_;
-        double_t actual_theta_;
-
-        actual_theta_ = turtle1_pose_->theta;
-
-        error_ = actual_theta_ - desired_theta_;
-
-        if (error_ > M_PI)
-            error_ = error_ - M_PI;
-
-        error_ = error_ * 0.3;
-
-        new_theta_.angular.z = error_;
-        new_theta_.angular.y = 0;
-        new_theta_.angular.x = 0;
-
-        new_theta_.linear.x = 0;
-        new_theta_.linear.y = 0;
-        new_theta_.linear.z = 0;
-
-        cmd_vel_turtle1_publisher_->publish(new_theta_);
-    }
-
-    void velocityPcontroller(turtlesim::msg::Pose::SharedPtr turtle1_pose_, Point target_turtle_)
-    {
-        double_t distance_;
-        Point master_turtle_;
-        geometry_msgs::msg::Twist new_x_;
-
-        master_turtle_.x = turtle1_pose_->x;
-        master_turtle_.y = turtle1_pose_->y;
-
-        distance_ = distanceBetweenPoints(master_turtle_, target_turtle_);
-
-        distance_ = distance_ * 0.3;
-
-        new_x_.angular.z = 0;
-        new_x_.angular.y = 0;
-        new_x_.angular.x = 0;
-
-        new_x_.linear.x = distance_;
-        new_x_.linear.y = 0;
-        new_x_.linear.z = 0;
-
-        cmd_vel_turtle1_publisher_->publish(new_x_);
-    }
 
     std::vector<std::thread> threads_;
-    std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> alive_turtles_;
+    turtlesim_catch_them_all_project_interfaces::msg::Turtle target_turtle_;
+    turtlesim::msg::Pose master_turtle_pose_;
+    bool turtlesim_up_ = false;
+    bool catching_a_turtle_ = false;
 
-    rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::TimerBase::SharedPtr timer_theta_;
-    rclcpp::TimerBase::SharedPtr timer_velocity_;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_turtle1_publisher_;
-    rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr pose_turtle1_subscriber_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+    rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr pose_master_turtle_subscriber_;
     rclcpp::Subscription<turtlesim_catch_them_all_project_interfaces::msg::TurtleArray>::SharedPtr alive_turtles_subscriber_;
 };
 
