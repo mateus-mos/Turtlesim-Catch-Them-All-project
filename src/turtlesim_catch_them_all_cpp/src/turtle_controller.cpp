@@ -45,11 +45,13 @@ private:
         catching_a_turtle_ = true;
 
         double_t distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
-        double_t distance_k_ = 0.3;
+        double_t distance_k_ = 1; 
 
         double_t theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) ); 
         double_t target_theta_;
-        double_t target_k_ = 2; 
+        double_t theta_k_ = 7; 
+        double_t diff_theta_;
+        double_t master_theta_two_pi_;
 
         auto client = this->create_client<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle>("catch_turtle");
 
@@ -80,22 +82,44 @@ private:
                     target_theta_ = theta_;
             }
 
-            /* Calculate the best direction to turn */
-            //if(abs(2*M_PI - target_theta_ - master_turtle_pose_.theta) > target_theta_ - master_turtle_pose_.theta)
-            //    msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*target_k_;
-            //else
-            //    msg_master_pose_.angular.z = abs(2*M_PI - target_theta_ - master_turtle_pose_.theta)*-target_k_;
-            if( (target_theta_ - master_turtle_pose_.theta) < M_PI)
-                msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*target_k_;
+            if(master_turtle_pose_.theta >= 0)
+                master_theta_two_pi_ = master_turtle_pose_.theta;
             else
-                msg_master_pose_.angular.z = abs(target_theta_ - master_turtle_pose_.theta)*-target_k_;
+                master_theta_two_pi_ = 2*M_PI + master_turtle_pose_.theta;
+            
+            diff_theta_ = master_theta_two_pi_ - target_theta_;
 
+            if(diff_theta_ > 0)
+            {
+                if(diff_theta_ > M_PI)
+                    msg_master_pose_.angular.z = diff_theta_*theta_k_;
+                else
+                    msg_master_pose_.angular.z = -diff_theta_*theta_k_;
+            }
+            else
+            {
+                if(abs(diff_theta_) > M_PI)
+                    msg_master_pose_.angular.z = diff_theta_*theta_k_;
+                else
+                    msg_master_pose_.angular.z = -diff_theta_*theta_k_;
+            }
 
-           msg_master_pose_.linear.x = distance_from_master_ * distance_k_;
+            //if(abs(diff_theta_) > M_PI && diff_theta_ > 0)
+            //{
+            //    /* Counter clockwise */
+            //    msg_master_pose_.angular.z = diff_theta_*theta_k_;
+            //}
+            //else
+            //{
+            //    /* Clock Wise */
+            //    msg_master_pose_.angular.z = -(diff_theta_*theta_k_);
+            //}
 
-           cmd_vel_publisher_->publish(msg_master_pose_);
+            msg_master_pose_.linear.x = distance_from_master_ * distance_k_;
+            cmd_vel_publisher_->publish(msg_master_pose_);
 
-           distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
+            distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
+            theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) );
         }
 
         /* Sendo request to catch the turtle */

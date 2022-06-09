@@ -31,7 +31,7 @@ public:
         );
 
         timer_ = this->create_wall_timer(
-            std::chrono::seconds(5), 
+            std::chrono::seconds(2), 
             [this]()->void{
                 threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::spawnTurtle, this)));
             }
