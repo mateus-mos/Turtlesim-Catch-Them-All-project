@@ -40,16 +40,16 @@ private:
     void CatchTarget()
     {
         RCLCPP_INFO(this->get_logger(), "Catching the " + target_turtle_.name + " turtle");
-
-        auto msg_master_pose_ = geometry_msgs::msg::Twist(); 
         catching_a_turtle_ = true;
+        auto msg_master_pose_ = geometry_msgs::msg::Twist(); 
 
         double_t distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
         double_t distance_k_ = 1; 
 
+
         double_t theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) ); 
         double_t target_theta_;
-        double_t theta_k_ = 7; 
+        double_t theta_k_ = 6; 
         double_t diff_theta_;
         double_t master_theta_two_pi_;
 
@@ -64,7 +64,7 @@ private:
         auto request = std::make_shared<turtlesim_catch_them_all_project_interfaces::srv::CatchTurtle::Request>();
         request->name = target_turtle_.name;
 
-        while(distance_from_master_ > 0.5)
+        while(distance_from_master_ > 1)
         {
             /* Calculate the target theta target turtles quadrant */
             if(target_turtle_.x < master_turtle_pose_.x)
@@ -104,23 +104,16 @@ private:
                     msg_master_pose_.angular.z = -diff_theta_*theta_k_;
             }
 
-            //if(abs(diff_theta_) > M_PI && diff_theta_ > 0)
-            //{
-            //    /* Counter clockwise */
-            //    msg_master_pose_.angular.z = diff_theta_*theta_k_;
-            //}
-            //else
-            //{
-            //    /* Clock Wise */
-            //    msg_master_pose_.angular.z = -(diff_theta_*theta_k_);
-            //}
-
-            msg_master_pose_.linear.x = distance_from_master_ * distance_k_;
+            msg_master_pose_.linear.x = distance_from_master_*distance_k_; 
             cmd_vel_publisher_->publish(msg_master_pose_);
 
             distance_from_master_ = distanceFromMaster(target_turtle_.x, target_turtle_.y);
             theta_ = atan( abs(master_turtle_pose_.y - target_turtle_.y) / abs(master_turtle_pose_.x - target_turtle_.x) );
         }
+        msg_master_pose_.linear.x = 0.5; 
+        msg_master_pose_.angular.z = 0;
+        cmd_vel_publisher_->publish(msg_master_pose_);
+
 
         /* Sendo request to catch the turtle */
         auto future = client->async_send_request(request);
@@ -146,9 +139,6 @@ private:
 
     void callbackAliveTurtles(turtlesim_catch_them_all_project_interfaces::msg::TurtleArray::SharedPtr alive_turtles_)
     {
-        /* If the master turtle is already catching a turtle, we don't need a new target */
-        if(catching_a_turtle_ == true)
-            return;
 
         double_t lowest_distance_ = distanceFromMaster(alive_turtles_->alive_turtles.at(0).x, alive_turtles_->alive_turtles.at(0).y);
         double_t new_distance_ = 0;
@@ -163,7 +153,7 @@ private:
             if(lowest_distance_ > new_distance_)
             {
                 lowest_distance_ = new_distance_;
-                target_turtle_ = alive_turtles_->alive_turtles.at(0);
+                target_turtle_ = alive_turtles_->alive_turtles.at(i);
             }
         }
         threads_.push_back(std::thread(std::bind(&TurtleControllerNode::CatchTarget, this)));

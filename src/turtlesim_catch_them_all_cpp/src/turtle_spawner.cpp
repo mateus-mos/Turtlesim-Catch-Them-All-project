@@ -31,7 +31,7 @@ public:
         );
 
         timer_ = this->create_wall_timer(
-            std::chrono::seconds(2), 
+            std::chrono::seconds(1), 
             [this]()->void{
                 threads_.push_back(std::thread(std::bind(&TurtleSpawnerNode::spawnTurtle, this)));
             }
@@ -63,7 +63,8 @@ private:
         request->x = dist(gen);
         request->y = dist(gen);
         request->theta = dist(gen);
-        request->name = "turtle" + std::to_string(int(request->x)) + std::to_string(int(request->y)) + std::to_string(int(request->theta));
+        request->name = "turtle" + std::to_string(counter_);
+        counter_+=1;
 
 
         /* Fill the information of the new turtle */
@@ -152,6 +153,7 @@ private:
         }
     }
 
+    int counter_ = 2;
     std::vector<std::thread> threads_;
     std::vector<turtlesim_catch_them_all_project_interfaces::msg::Turtle> alive_turtles_;
 
